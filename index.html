@@ -1,0 +1,1112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>GoM3U TV</title>
+<style>
+/* ============================================================
+   GoM3U TV — Basic LED TV Firmware Skin
+   ============================================================ */
+:root{
+  --tv-bg:#000000;
+  --fw-bg:#0b0d10;
+  --fw-panel:#14171c;
+  --fw-panel-2:#1b1f26;
+  --fw-line:#262b33;
+  --fw-text:#e8ebef;
+  --fw-text-dim:#8b93a1;
+  --fw-accent:#2fa8ff;
+  --fw-accent-dim:#1c6aa3;
+  --fw-danger:#ff4d4f;
+  --fw-focus:0 0 0 2px #05070a, 0 0 0 4px var(--fw-accent);
+  --osd-h:64px;
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+html,body{
+  margin:0; padding:0; width:100%; height:100%;
+  background:var(--tv-bg); color:var(--fw-text);
+  font-family:"Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  overflow:hidden; user-select:none; -webkit-user-select:none;
+}
+button{font-family:inherit; color:inherit; background:none; border:none; cursor:pointer;}
+img{-webkit-user-drag:none;}
+
+/* ---------- ROOT LAYOUT ---------- */
+#tv{
+  position:fixed; inset:0; background:#000; overflow:hidden;
+}
+#screenFilter{
+  position:absolute; inset:0; pointer-events:none; z-index:5;
+  background:#000; opacity:0; transition:opacity .25s;
+}
+video{
+  position:absolute; inset:0; width:100%; height:100%; background:#000;
+  transition:filter .1s linear;
+}
+
+/* ---------- POWER / BOOT ---------- */
+#bootScreen{
+  position:fixed; inset:0; background:#000; z-index:9999;
+  display:flex; align-items:center; justify-content:center;
+  flex-direction:column; gap:14px;
+}
+#bootScreen.hidden{display:none;}
+.boot-logo{
+  font-size:15px; letter-spacing:8px; color:var(--fw-accent); font-weight:600;
+  opacity:0; animation:bootFade 1.4s ease forwards;
+}
+.boot-bar{width:160px; height:2px; background:var(--fw-line); overflow:hidden; border-radius:2px;}
+.boot-bar span{display:block; height:100%; width:30%; background:var(--fw-accent); animation:bootScan 1.2s ease-in-out infinite;}
+@keyframes bootFade{from{opacity:0; letter-spacing:14px;} to{opacity:1; letter-spacing:8px;}}
+@keyframes bootScan{0%{transform:translateX(-100%);}100%{transform:translateX(430%);}}
+
+/* ---------- SETUP SCREEN ---------- */
+#setupScreen{
+  position:fixed; inset:0; z-index:9000; background:var(--fw-bg);
+  display:flex; align-items:center; justify-content:center;
+}
+#setupScreen.hidden{display:none;}
+.setup-card{
+  width:min(560px,88vw); background:var(--fw-panel); border:1px solid var(--fw-line);
+  border-radius:6px; padding:32px 34px 28px;
+}
+.setup-eyebrow{font-size:11px; letter-spacing:3px; color:var(--fw-accent); font-weight:700;}
+.setup-title{font-size:22px; font-weight:600; margin:6px 0 22px; color:var(--fw-text);}
+.field{margin-bottom:16px;}
+.field label{display:block; font-size:12px; color:var(--fw-text-dim); margin-bottom:6px; letter-spacing:.3px;}
+.field input[type=text],.field input[type=url]{
+  width:100%; background:#05070a; border:1px solid var(--fw-line); color:var(--fw-text);
+  padding:11px 12px; border-radius:4px; font-size:14px; outline:none;
+}
+.field input:focus{border-color:var(--fw-accent); box-shadow:0 0 0 1px var(--fw-accent-dim);}
+.file-row{display:flex; gap:10px; align-items:center;}
+.file-btn{
+  border:1px dashed var(--fw-line); padding:10px 14px; border-radius:4px; font-size:13px;
+  color:var(--fw-text-dim); flex:1; text-align:center;
+}
+.file-btn:hover{border-color:var(--fw-accent); color:var(--fw-text);}
+.setup-actions{display:flex; justify-content:flex-end; gap:10px; margin-top:22px;}
+.btn{
+  padding:10px 20px; border-radius:4px; font-size:13px; font-weight:600; letter-spacing:.3px;
+  background:var(--fw-panel-2); border:1px solid var(--fw-line);
+}
+.btn.primary{background:var(--fw-accent); border-color:var(--fw-accent); color:#04121f;}
+.btn:focus,.file-btn:focus{outline:none; box-shadow:var(--fw-focus);}
+.setup-error{color:var(--fw-danger); font-size:12px; margin-top:4px; min-height:14px;}
+.setup-hint{font-size:11px; color:var(--fw-text-dim); margin-top:2px;}
+
+/* ---------- NO SIGNAL ---------- */
+#noSignal{
+  position:absolute; inset:0; z-index:40; background:#000;
+  display:none; align-items:center; justify-content:center; flex-direction:column; gap:10px;
+}
+#noSignal.show{display:flex;}
+.ns-bars{display:flex; gap:4px;}
+.ns-bars i{width:5px; height:26px; background:var(--fw-text-dim); border-radius:2px; animation:nsPulse 1s ease-in-out infinite;}
+.ns-bars i:nth-child(2){animation-delay:.1s;} .ns-bars i:nth-child(3){animation-delay:.2s;}
+.ns-bars i:nth-child(4){animation-delay:.3s;} .ns-bars i:nth-child(5){animation-delay:.4s;}
+@keyframes nsPulse{0%,100%{opacity:.25; transform:scaleY(.5);}50%{opacity:1; transform:scaleY(1);}}
+.ns-text{font-size:13px; letter-spacing:3px; color:var(--fw-text-dim); font-weight:600;}
+
+/* ---------- OSD (channel banner) ---------- */
+#osd{
+  position:absolute; left:0; right:0; top:0; z-index:30;
+  padding:18px 26px; display:flex; align-items:center; gap:16px;
+  background:linear-gradient(180deg, rgba(0,0,0,.85), rgba(0,0,0,0));
+  transform:translateY(-100%); transition:transform .25s ease, opacity .25s ease;
+  opacity:0; pointer-events:none;
+}
+#osd.show{transform:translateY(0); opacity:1;}
+.osd-num{font-size:34px; font-weight:700; color:var(--fw-accent); min-width:52px;}
+.osd-logo{width:46px; height:46px; border-radius:6px; background:var(--fw-panel-2); object-fit:contain; border:1px solid var(--fw-line);}
+.osd-info{flex:1; min-width:0;}
+.osd-name{font-size:18px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.osd-program{font-size:12px; color:var(--fw-text-dim); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.osd-progress{height:3px; background:var(--fw-line); border-radius:2px; margin-top:6px; overflow:hidden;}
+.osd-progress i{display:block; height:100%; background:var(--fw-accent); width:0%;}
+.osd-time{font-size:20px; font-weight:600; font-variant-numeric:tabular-nums; text-align:right; min-width:70px;}
+
+/* ---------- BOTTOM CONTROLS ---------- */
+#controls{
+  position:absolute; left:0; right:0; bottom:0; z-index:30;
+  display:flex; align-items:center; gap:6px; padding:14px 20px;
+  background:linear-gradient(0deg, rgba(0,0,0,.85), rgba(0,0,0,0));
+  transform:translateY(100%); transition:transform .25s ease, opacity .25s ease; opacity:0;
+  pointer-events:none;
+}
+#controls.show{transform:translateY(0); opacity:1; pointer-events:auto;}
+.ctrl-btn{
+  width:42px; height:42px; display:flex; align-items:center; justify-content:center;
+  border-radius:50%; background:rgba(255,255,255,.06);
+}
+.ctrl-btn:hover{background:rgba(255,255,255,.14);}
+.ctrl-btn:focus{outline:none; box-shadow:var(--fw-focus);}
+.ctrl-btn svg{width:20px; height:20px; fill:var(--fw-text);}
+.ctrl-spacer{flex:1;}
+.ctrl-slider{width:80px; height:4px; -webkit-appearance:none; background:var(--fw-line); border-radius:2px; outline:none;}
+.ctrl-slider::-webkit-slider-thumb{-webkit-appearance:none; width:12px; height:12px; border-radius:50%; background:var(--fw-accent);}
+
+/* ---------- CHANNEL LIST PANEL ---------- */
+#chList{
+  position:absolute; top:0; right:0; bottom:0; width:min(340px,78vw); z-index:50;
+  background:rgba(11,13,16,.97); border-left:1px solid var(--fw-line);
+  transform:translateX(100%); transition:transform .22s ease;
+  display:flex; flex-direction:column;
+}
+#chList.show{transform:translateX(0);}
+.panel-head{padding:16px 18px 10px; border-bottom:1px solid var(--fw-line); display:flex; align-items:center; justify-content:space-between;}
+.panel-head h2{font-size:14px; letter-spacing:1px; font-weight:700; margin:0; color:var(--fw-text-dim);}
+#chSearch{
+  margin:10px 14px; padding:8px 10px; background:var(--fw-panel-2); border:1px solid var(--fw-line);
+  border-radius:4px; color:var(--fw-text); font-size:13px; outline:none;
+}
+#chSearch:focus{border-color:var(--fw-accent);}
+#chListScroll{flex:1; overflow-y:auto; position:relative;}
+#chListSpacer{position:relative; width:100%;}
+.ch-row{
+  position:absolute; left:0; right:0; height:56px; display:flex; align-items:center; gap:10px;
+  padding:0 14px; border-bottom:1px solid rgba(255,255,255,.03);
+}
+.ch-row:hover{background:rgba(255,255,255,.04);}
+.ch-row.active{background:rgba(47,168,255,.14); border-left:3px solid var(--fw-accent);}
+.ch-row.focused{box-shadow:inset 0 0 0 2px var(--fw-accent);}
+.ch-num{width:34px; font-size:14px; font-weight:700; color:var(--fw-text-dim); text-align:right;}
+.ch-logo{width:34px; height:34px; border-radius:4px; background:var(--fw-panel-2); object-fit:contain; flex-shrink:0;}
+.ch-meta{min-width:0;}
+.ch-name{font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.ch-group{font-size:11px; color:var(--fw-text-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+
+/* ---------- NUMBER PAD ---------- */
+#numPad{
+  position:absolute; inset:0; z-index:60; display:none; align-items:center; justify-content:center;
+  background:rgba(0,0,0,.55);
+}
+#numPad.show{display:flex;}
+.numpad-box{background:var(--fw-panel); border:1px solid var(--fw-line); border-radius:8px; padding:20px; width:260px;}
+.numpad-display{
+  background:#05070a; border:1px solid var(--fw-line); border-radius:4px; text-align:center;
+  font-size:30px; letter-spacing:6px; padding:12px 0; margin-bottom:14px; color:var(--fw-accent); font-weight:700;
+}
+.numpad-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:8px;}
+.numpad-grid button{
+  aspect-ratio:1; background:var(--fw-panel-2); border:1px solid var(--fw-line); border-radius:6px;
+  font-size:18px; font-weight:600;
+}
+.numpad-grid button:hover, .numpad-grid button:focus{background:var(--fw-accent); color:#04121f; outline:none;}
+
+/* ---------- SETTINGS PANEL ---------- */
+#settingsPanel{
+  position:absolute; inset:0; z-index:55; display:none; align-items:center; justify-content:center;
+  background:rgba(0,0,0,.6);
+}
+#settingsPanel.show{display:flex;}
+.settings-box{width:min(420px,86vw); background:var(--fw-panel); border:1px solid var(--fw-line); border-radius:8px; padding:22px;}
+.settings-box h2{margin:0 0 16px; font-size:15px; letter-spacing:1px; color:var(--fw-text-dim);}
+.settings-row{
+  display:flex; align-items:center; justify-content:space-between; padding:12px 4px;
+  border-bottom:1px solid var(--fw-line);
+}
+.settings-row:last-child{border-bottom:none;}
+.settings-row span{font-size:13px;}
+.seg{display:flex; border:1px solid var(--fw-line); border-radius:4px; overflow:hidden;}
+.seg button{padding:6px 10px; font-size:12px; background:var(--fw-panel-2);}
+.seg button.active{background:var(--fw-accent); color:#04121f;}
+.settings-row select{
+  background:var(--fw-panel-2); color:var(--fw-text); border:1px solid var(--fw-line); border-radius:4px; padding:6px 8px; font-size:12px;
+}
+.settings-row .btn{padding:6px 12px; font-size:12px;}
+.settings-close{margin-top:16px; width:100%; text-align:center;}
+
+/* ---------- FOCUSABLE OUTLINE (remote nav) ---------- */
+[data-focusable]:focus{outline:none;}
+[data-focusable].nav-focus{box-shadow:var(--fw-focus); border-radius:4px;}
+
+/* Scrollbar (subtle) */
+#chListScroll::-webkit-scrollbar{width:5px;}
+#chListScroll::-webkit-scrollbar-thumb{background:var(--fw-line); border-radius:3px;}
+</style>
+</head>
+<body>
+
+<!-- ================= BOOT SCREEN ================= -->
+<div id="bootScreen">
+  <div class="boot-logo">GoM3U</div>
+  <div class="boot-bar"><span></span></div>
+</div>
+
+<!-- ================= SETUP SCREEN ================= -->
+<div id="setupScreen" class="hidden">
+  <div class="setup-card">
+    <div class="setup-eyebrow">FIRST TIME SETUP</div>
+    <div class="setup-title">Set up your playlist</div>
+
+    <div class="field">
+      <label for="playlistName">Playlist name</label>
+      <input type="text" id="playlistName" placeholder="My Playlist" data-focusable>
+    </div>
+
+    <div class="field">
+      <label for="playlistUrl">M3U URL</label>
+      <input type="url" id="playlistUrl" placeholder="https://example.com/playlist.m3u8" data-focusable>
+    </div>
+
+    <div class="field">
+      <label>Or import a file</label>
+      <div class="file-row">
+        <button class="file-btn" id="fileBtn" data-focusable>Choose .m3u / .m3u8 file</button>
+        <input type="file" id="fileInput" accept=".m3u,.m3u8,text/plain" style="display:none">
+      </div>
+      <div class="setup-hint" id="fileName"></div>
+    </div>
+
+    <div class="setup-error" id="setupError"></div>
+
+    <div class="setup-actions">
+      <button class="btn primary" id="saveBtn" data-focusable>Save playlist</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= TV SCREEN ================= -->
+<div id="tv">
+  <video id="video" playsinline webkit-playsinline></video>
+  <div id="screenFilter"></div>
+
+  <div id="noSignal">
+    <div class="ns-bars"><i></i><i></i><i></i><i></i><i></i></div>
+    <div class="ns-text">NO SIGNAL — RECONNECTING</div>
+  </div>
+
+  <!-- OSD banner -->
+  <div id="osd">
+    <div class="osd-num" id="osdNum">1</div>
+    <img class="osd-logo" id="osdLogo" alt="">
+    <div class="osd-info">
+      <div class="osd-name" id="osdName">Channel</div>
+      <div class="osd-program" id="osdProgram">Live</div>
+      <div class="osd-progress"><i id="osdProgressBar"></i></div>
+    </div>
+    <div class="osd-time" id="osdTime">--:--</div>
+  </div>
+
+  <!-- Bottom control bar -->
+  <div id="controls">
+    <button class="ctrl-btn" id="btnPrevCh" data-focusable title="Previous channel"><svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg></button>
+    <button class="ctrl-btn" id="btnNextCh" data-focusable title="Next channel"><svg viewBox="0 0 24 24"><path d="M6 6l8.5 6L6 18zM16 6h2v12h-2z"/></svg></button>
+    <button class="ctrl-btn" id="btnList" data-focusable title="Channel list"><svg viewBox="0 0 24 24"><path d="M4 6h16v2H4zM4 11h16v2H4zM4 16h16v2H4z"/></svg></button>
+    <button class="ctrl-btn" id="btnNumPad" data-focusable title="Number pad"><svg viewBox="0 0 24 24"><path d="M7 5h2v2H7zm4 0h2v2h-2zm4 0h2v2h-2zM7 9h2v2H7zm4 0h2v2h-2zm4 0h2v2h-2zM7 13h2v2H7zm4 0h2v2h-2zm4 0h2v2h-2zM11 17h2v2h-2z"/></svg></button>
+    <div class="ctrl-spacer"></div>
+    <button class="ctrl-btn" id="btnMute" data-focusable title="Mute"><svg viewBox="0 0 24 24"><path d="M3 10v4h4l5 5V5L7 10H3z"/></svg></button>
+    <input type="range" class="ctrl-slider" id="volumeSlider" min="0" max="100" value="80" data-focusable>
+    <button class="ctrl-btn" id="btnSettings" data-focusable title="Settings"><svg viewBox="0 0 24 24"><path d="M12 8a4 4 0 100 8 4 4 0 000-8zm8.94 4a7.9 7.9 0 00-.14-1.5l2.03-1.58-2-3.46-2.4.96a8.03 8.03 0 00-1.3-.75L17 3h-4l-.13 2.67c-.46.19-.9.44-1.3.75l-2.4-.96-2 3.46 2.03 1.58c-.09.49-.14.99-.14 1.5s.05 1.01.14 1.5L7.17 15.08l2 3.46 2.4-.96c.4.31.84.56 1.3.75L13 21h4l.13-2.67c.46-.19.9-.44 1.3-.75l2.4.96 2-3.46-2.03-1.58c.09-.49.14-.99.14-1.5z"/></svg></button>
+    <button class="ctrl-btn" id="btnRotate" data-focusable title="Rotate"><svg viewBox="0 0 24 24"><path d="M12 5V2L8 6l4 4V7a5 5 0 11-5 5H5a7 7 0 107-7z"/></svg></button>
+    <button class="ctrl-btn" id="btnFullscreen" data-focusable title="Fullscreen"><svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7zm-2-4h2V7h3V5H5zm12 9h-3v2h5v-5h-2zM14 5v2h3v3h2V5z"/></svg></button>
+  </div>
+
+  <!-- Channel list panel -->
+  <div id="chList">
+    <div class="panel-head"><h2>CHANNELS</h2><button class="ctrl-btn" id="btnCloseList" data-focusable>✕</button></div>
+    <input type="text" id="chSearch" placeholder="Search channels..." data-focusable>
+    <div id="chListScroll">
+      <div id="chListSpacer"></div>
+    </div>
+  </div>
+
+  <!-- Number pad overlay -->
+  <div id="numPad">
+    <div class="numpad-box">
+      <div class="numpad-display" id="numPadDisplay">&nbsp;</div>
+      <div class="numpad-grid">
+        <button data-focusable data-digit="1">1</button>
+        <button data-focusable data-digit="2">2</button>
+        <button data-focusable data-digit="3">3</button>
+        <button data-focusable data-digit="4">4</button>
+        <button data-focusable data-digit="5">5</button>
+        <button data-focusable data-digit="6">6</button>
+        <button data-focusable data-digit="7">7</button>
+        <button data-focusable data-digit="8">8</button>
+        <button data-focusable data-digit="9">9</button>
+        <button data-focusable id="numPadClear">C</button>
+        <button data-focusable data-digit="0">0</button>
+        <button data-focusable id="numPadOk">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings panel -->
+  <div id="settingsPanel">
+    <div class="settings-box">
+      <h2>SETTINGS</h2>
+      <div class="settings-row">
+        <span>Aspect ratio</span>
+        <div class="seg" id="aspectSeg">
+          <button data-val="contain" data-focusable>Contain</button>
+          <button data-val="cover" data-focusable>Cover</button>
+          <button data-val="fill" data-focusable>Stretch</button>
+          <button data-val="none" data-focusable>Auto</button>
+        </div>
+      </div>
+      <div class="settings-row">
+        <span>Sleep timer</span>
+        <select id="sleepSelect" data-focusable>
+          <option value="0">Off</option>
+          <option value="15">15 min</option>
+          <option value="30">30 min</option>
+          <option value="60">60 min</option>
+          <option value="120">120 min</option>
+        </select>
+      </div>
+      <div class="settings-row">
+        <span>Change playlist</span>
+        <button class="btn" id="btnChangePlaylist" data-focusable>Change</button>
+      </div>
+      <div class="settings-row">
+        <span>Clear cache</span>
+        <button class="btn" id="btnClearCache" data-focusable>Clear</button>
+      </div>
+      <div class="settings-row">
+        <span>Reset player</span>
+        <button class="btn" id="btnReset" data-focusable>Reset</button>
+      </div>
+      <button class="btn primary settings-close" id="btnCloseSettings" data-focusable>Close</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.5.15/hls.min.js"></script>
+<script>
+(function(){
+"use strict";
+
+/* ============================================================
+   STORAGE KEYS
+   ============================================================ */
+const LS = {
+  PLAYLIST: "gom3u_playlist",     // {name, source, channels:[...]}
+  LAST_CH:  "gom3u_last_channel", // index or id
+  VOLUME:   "gom3u_volume",       // 0-100
+  MUTED:    "gom3u_muted",
+  ASPECT:   "gom3u_aspect",       // contain/cover/fill/none
+  BRIGHT:   "gom3u_brightness"    // 0-200 (%)
+};
+
+function lsGet(key, fallback){
+  try{ const v = localStorage.getItem(key); return v===null? fallback : JSON.parse(v); }
+  catch(e){ return fallback; }
+}
+function lsSet(key, val){
+  try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){ /* storage full/unavailable */ }
+}
+
+/* ============================================================
+   STATE
+   ============================================================ */
+let channels = [];        // parsed channel list
+let filteredChannels = [];// after search filter (list panel)
+let currentIndex = -1;    // index into `channels`
+let hls = null;
+let video = document.getElementById("video");
+let reconnectTimer = null;
+let reconnectAttempts = 0;
+let osdTimer = null;
+let controlsTimer = null;
+let numPadTimer = null;
+let numPadBuffer = "";
+let sleepTimerHandle = null;
+let focusables = [];      // currently visible/enabled focusable elements
+let focusIndex = 0;
+let activeContext = "player"; // player | list | numpad | settings | setup
+
+/* ============================================================
+   BOOT SEQUENCE
+   ============================================================ */
+window.addEventListener("load", ()=>{
+  setTimeout(init, 900);
+});
+
+function init(){
+  document.getElementById("bootScreen").classList.add("hidden");
+  const playlist = lsGet(LS.PLAYLIST, null);
+  if(playlist && playlist.channels && playlist.channels.length){
+    channels = playlist.channels;
+    startTV();
+  } else {
+    showSetup();
+  }
+}
+
+/* ============================================================
+   SETUP SCREEN
+   ============================================================ */
+function showSetup(){
+  document.getElementById("setupScreen").classList.remove("hidden");
+  setContext("setup");
+  document.getElementById("playlistName").focus();
+}
+
+function hideSetup(){
+  document.getElementById("setupScreen").classList.add("hidden");
+}
+
+document.getElementById("fileBtn").addEventListener("click", ()=> document.getElementById("fileInput").click());
+document.getElementById("fileInput").addEventListener("change", (e)=>{
+  const f = e.target.files[0];
+  if(f){ document.getElementById("fileName").textContent = "Selected: " + f.name; }
+});
+
+document.getElementById("saveBtn").addEventListener("click", async ()=>{
+  const errEl = document.getElementById("setupError");
+  errEl.textContent = "";
+  const name = document.getElementById("playlistName").value.trim() || "My Playlist";
+  const url = document.getElementById("playlistUrl").value.trim();
+  const fileInput = document.getElementById("fileInput");
+  const file = fileInput.files[0];
+
+  let text = null;
+  try{
+    if(file){
+      text = await file.text();
+    } else if(url){
+      const res = await fetch(url);
+      if(!res.ok) throw new Error("HTTP " + res.status);
+      text = await res.text();
+    } else {
+      errEl.textContent = "Enter an M3U URL or import a file.";
+      return;
+    }
+  }catch(err){
+    errEl.textContent = "Could not load playlist: " + err.message;
+    return;
+  }
+
+  const parsed = parseM3U(text);
+  if(!parsed.length){
+    errEl.textContent = "No channels found in this playlist.";
+    return;
+  }
+
+  const playlist = { name, source: url || (file? file.name:""), channels: parsed };
+  lsSet(LS.PLAYLIST, playlist);
+  channels = parsed;
+  hideSetup();
+  startTV();
+});
+
+/* ============================================================
+   M3U PARSER
+   ============================================================ */
+function parseM3U(text){
+  const lines = text.split(/\r?\n/);
+  const list = [];
+  let pending = null;
+  for(let raw of lines){
+    const line = raw.trim();
+    if(!line) continue;
+    if(line.startsWith("#EXTINF")){
+      const idx = line.indexOf(":");
+      const body = idx>=0 ? line.slice(idx+1) : "";
+      const commaIdx = body.lastIndexOf(",");
+      const attrs = commaIdx>=0 ? body.slice(0, commaIdx) : body;
+      const name = commaIdx>=0 ? body.slice(commaIdx+1).trim() : "Unnamed Channel";
+      const logoM = attrs.match(/tvg-logo="([^"]*)"/i);
+      const groupM = attrs.match(/group-title="([^"]*)"/i);
+      const idM = attrs.match(/tvg-id="([^"]*)"/i);
+      pending = {
+        name: name || "Unnamed Channel",
+        logo: logoM ? logoM[1] : "",
+        group: groupM ? groupM[1] : "General",
+        tvgId: idM ? idM[1] : ""
+      };
+    } else if(line.startsWith("#")){
+      continue; // ignore other directives (#EXTVLCOPT, #EXTGRP, etc.)
+    } else {
+      if(pending){
+        pending.url = line;
+        pending.number = list.length + 1;
+        list.push(pending);
+        pending = null;
+      } else if(/^https?:\/\//i.test(line)){
+        // bare URL with no EXTINF
+        list.push({ name:"Channel "+(list.length+1), logo:"", group:"General", tvgId:"", url:line, number:list.length+1 });
+      }
+    }
+  }
+  return list;
+}
+
+/* ============================================================
+   START TV
+   ============================================================ */
+function startTV(){
+  buildChannelListDOM();
+  applyStoredSettings();
+  let startIndex = 0;
+  const lastId = lsGet(LS.LAST_CH, null);
+  if(lastId !== null){
+    const found = channels.findIndex(c => channelKey(c) === lastId);
+    if(found >= 0) startIndex = found;
+  }
+  loadChannel(startIndex);
+  setContext("player");
+  showOSD();
+  showControls();
+}
+
+function channelKey(ch){ return ch.tvgId ? ("id:"+ch.tvgId) : ("u:"+ch.url); }
+
+function applyStoredSettings(){
+  const vol = lsGet(LS.VOLUME, 80);
+  const muted = lsGet(LS.MUTED, false);
+  video.volume = vol/100;
+  video.muted = !!muted;
+  document.getElementById("volumeSlider").value = vol;
+  const aspect = lsGet(LS.ASPECT, "contain");
+  setAspect(aspect, false);
+  const bright = lsGet(LS.BRIGHT, 100);
+  video.style.filter = "brightness(" + (bright/100) + ")";
+}
+
+/* ============================================================
+   CHANNEL LOADING / PLAYBACK
+   ============================================================ */
+function loadChannel(index){
+  if(index < 0 || index >= channels.length) return;
+  currentIndex = index;
+  const ch = channels[index];
+  reconnectAttempts = 0;
+  clearTimeout(reconnectTimer);
+  showNoSignal();
+
+  if(hls){ try{ hls.destroy(); }catch(e){} hls = null; }
+  video.removeAttribute("src");
+  video.load();
+
+  const url = ch.url;
+  const isNativeHls = video.canPlayType("application/vnd.apple.mpegurl");
+
+  if(window.Hls && Hls.isSupported()){
+    hls = new Hls({
+      lowLatencyMode:true,
+      backBufferLength:60,
+      maxBufferLength:20,
+      maxMaxBufferLength:40,
+      liveSyncDurationCount:3,
+      liveMaxLatencyDurationCount:10,
+      enableWorker:true,
+      fragLoadingMaxRetry:6,
+      manifestLoadingMaxRetry:6,
+      levelLoadingMaxRetry:6
+    });
+    hls.loadSource(url);
+    hls.attachMedia(video);
+    hls.on(Hls.Events.MANIFEST_PARSED, ()=>{ attemptPlay(); hideNoSignal(); });
+    hls.on(Hls.Events.ERROR, (evt, data)=> handleHlsError(data));
+  } else if(isNativeHls){
+    video.src = url;
+    video.addEventListener("loadedmetadata", function onMeta(){
+      attemptPlay(); hideNoSignal();
+      video.removeEventListener("loadedmetadata", onMeta);
+    });
+    video.addEventListener("error", onNativeError);
+  } else {
+    // Direct MP4/TS fallback
+    video.src = url;
+    attemptPlay();
+    video.addEventListener("loadeddata", function onLD(){ hideNoSignal(); video.removeEventListener("loadeddata", onLD); });
+    video.addEventListener("error", onNativeError);
+  }
+
+  updateOSD(ch);
+  lsSet(LS.LAST_CH, channelKey(ch));
+  highlightActiveInList();
+}
+
+function onNativeError(){
+  showNoSignal();
+  scheduleReconnect(()=> loadChannel(currentIndex));
+}
+
+function attemptPlay(){
+  const p = video.play();
+  if(p && p.catch){
+    p.catch(()=>{
+      // Autoplay blocked with audio — retry muted, then restore volume on first gesture
+      video.muted = true;
+      video.play().catch(()=>{});
+      const restore = ()=>{
+        video.muted = lsGet(LS.MUTED, false);
+        document.removeEventListener("click", restore);
+        document.removeEventListener("keydown", restore);
+        document.removeEventListener("touchstart", restore);
+      };
+      document.addEventListener("click", restore, {once:true});
+      document.addEventListener("keydown", restore, {once:true});
+      document.addEventListener("touchstart", restore, {once:true});
+    });
+  }
+}
+
+function handleHlsError(data){
+  if(!data.fatal) return;
+  showNoSignal();
+  switch(data.type){
+    case Hls.ErrorTypes.NETWORK_ERROR:
+      scheduleReconnect(()=>{ try{ hls.startLoad(); }catch(e){ loadChannel(currentIndex); } });
+      break;
+    case Hls.ErrorTypes.MEDIA_ERROR:
+      scheduleReconnect(()=>{ try{ hls.recoverMediaError(); }catch(e){ loadChannel(currentIndex); } });
+      break;
+    default:
+      scheduleReconnect(()=> loadChannel(currentIndex));
+      break;
+  }
+}
+
+function scheduleReconnect(fn){
+  clearTimeout(reconnectTimer);
+  reconnectAttempts++;
+  const delay = Math.min(1000 * reconnectAttempts, 8000);
+  reconnectTimer = setTimeout(fn, delay);
+}
+
+function nextChannel(){ loadChannel((currentIndex+1) % channels.length); showOSD(); }
+function prevChannel(){ loadChannel((currentIndex-1+channels.length) % channels.length); showOSD(); }
+
+/* ============================================================
+   OSD (channel banner)
+   ============================================================ */
+function updateOSD(ch){
+  document.getElementById("osdNum").textContent = ch.number;
+  document.getElementById("osdName").textContent = ch.name;
+  document.getElementById("osdProgram").textContent = ch.group || "Live";
+  const logo = document.getElementById("osdLogo");
+  logo.src = ch.logo || "";
+  logo.style.visibility = ch.logo ? "visible" : "hidden";
+  document.getElementById("osdProgressBar").style.width = "0%";
+}
+
+function showOSD(){
+  document.getElementById("osd").classList.add("show");
+  clearTimeout(osdTimer);
+  osdTimer = setTimeout(()=> document.getElementById("osd").classList.remove("show"), 5000);
+}
+
+function showControls(){
+  document.getElementById("controls").classList.add("show");
+  clearTimeout(controlsTimer);
+  controlsTimer = setTimeout(()=> document.getElementById("controls").classList.remove("show"), 5000);
+}
+
+function showNoSignal(){ document.getElementById("noSignal").classList.add("show"); }
+function hideNoSignal(){ document.getElementById("noSignal").classList.remove("show"); }
+
+// Clock in OSD
+setInterval(()=>{
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2,"0");
+  const mm = String(now.getMinutes()).padStart(2,"0");
+  document.getElementById("osdTime").textContent = hh+":"+mm;
+}, 1000);
+
+/* ============================================================
+   CHANNEL LIST PANEL (virtualized)
+   ============================================================ */
+const ROW_H = 56;
+function buildChannelListDOM(){
+  filteredChannels = channels.slice();
+  renderVirtualList();
+}
+
+function renderVirtualList(){
+  const scroller = document.getElementById("chListScroll");
+  const spacer = document.getElementById("chListSpacer");
+  spacer.style.height = (filteredChannels.length * ROW_H) + "px";
+  // clear existing rows
+  spacer.querySelectorAll(".ch-row").forEach(n=>n.remove());
+  renderVisibleRows();
+  scroller.onscroll = renderVisibleRows;
+}
+
+function renderVisibleRows(){
+  const scroller = document.getElementById("chListScroll");
+  const spacer = document.getElementById("chListSpacer");
+  const scrollTop = scroller.scrollTop;
+  const viewH = scroller.clientHeight || 600;
+  const buffer = 4;
+  const startIdx = Math.max(0, Math.floor(scrollTop/ROW_H) - buffer);
+  const endIdx = Math.min(filteredChannels.length, Math.ceil((scrollTop+viewH)/ROW_H) + buffer);
+
+  spacer.querySelectorAll(".ch-row").forEach(n=>n.remove());
+  const frag = document.createDocumentFragment();
+  for(let i=startIdx;i<endIdx;i++){
+    const ch = filteredChannels[i];
+    const row = document.createElement("div");
+    row.className = "ch-row" + (ch===channels[currentIndex] ? " active":"");
+    row.style.top = (i*ROW_H)+"px";
+    row.dataset.idx = channels.indexOf(ch);
+    row.tabIndex = 0;
+    row.setAttribute("data-focusable","");
+    row.innerHTML =
+      '<div class="ch-num">'+ch.number+'</div>'+
+      '<img class="ch-logo" src="'+(ch.logo||"")+'" onerror="this.style.visibility=\'hidden\'">'+
+      '<div class="ch-meta"><div class="ch-name">'+escapeHtml(ch.name)+'</div><div class="ch-group">'+escapeHtml(ch.group||"")+'</div></div>';
+    row.addEventListener("click", ()=>{
+      loadChannel(parseInt(row.dataset.idx,10));
+      closeList();
+    });
+    frag.appendChild(row);
+  }
+  spacer.appendChild(frag);
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+function highlightActiveInList(){ renderVisibleRows(); }
+
+document.getElementById("chSearch").addEventListener("input", (e)=>{
+  const q = e.target.value.toLowerCase().trim();
+  filteredChannels = !q ? channels.slice() : channels.filter(c => c.name.toLowerCase().includes(q) || (c.group||"").toLowerCase().includes(q));
+  document.getElementById("chListScroll").scrollTop = 0;
+  renderVirtualList();
+});
+
+function openList(){
+  document.getElementById("chList").classList.add("show");
+  setContext("list");
+  document.getElementById("chSearch").focus();
+}
+function closeList(){
+  document.getElementById("chList").classList.remove("show");
+  setContext("player");
+}
+document.getElementById("btnList").addEventListener("click", openList);
+document.getElementById("btnCloseList").addEventListener("click", closeList);
+
+/* ============================================================
+   NUMBER PAD
+   ============================================================ */
+function openNumPad(){
+  numPadBuffer = "";
+  document.getElementById("numPadDisplay").textContent = "\u00A0";
+  document.getElementById("numPad").classList.add("show");
+  setContext("numpad");
+}
+function closeNumPad(){
+  document.getElementById("numPad").classList.remove("show");
+  clearTimeout(numPadTimer);
+  setContext("player");
+}
+function numPadPress(d){
+  if(numPadBuffer.length>=3) numPadBuffer = "";
+  numPadBuffer += d;
+  document.getElementById("numPadDisplay").textContent = numPadBuffer;
+  clearTimeout(numPadTimer);
+  numPadTimer = setTimeout(numPadCommit, 1500);
+}
+function numPadCommit(){
+  const num = parseInt(numPadBuffer,10);
+  const idx = channels.findIndex(c => c.number === num);
+  if(idx>=0){ loadChannel(idx); showOSD(); }
+  closeNumPad();
+}
+document.querySelectorAll("#numPad [data-digit]").forEach(btn=>{
+  btn.addEventListener("click", ()=> numPadPress(btn.dataset.digit));
+});
+document.getElementById("numPadOk").addEventListener("click", numPadCommit);
+document.getElementById("numPadClear").addEventListener("click", ()=>{
+  numPadBuffer=""; document.getElementById("numPadDisplay").textContent="\u00A0"; clearTimeout(numPadTimer);
+});
+document.getElementById("btnNumPad").addEventListener("click", openNumPad);
+
+/* ============================================================
+   SETTINGS PANEL
+   ============================================================ */
+function openSettings(){
+  document.getElementById("settingsPanel").classList.add("show");
+  setContext("settings");
+}
+function closeSettings(){
+  document.getElementById("settingsPanel").classList.remove("show");
+  setContext("player");
+}
+document.getElementById("btnSettings").addEventListener("click", openSettings);
+document.getElementById("btnCloseSettings").addEventListener("click", closeSettings);
+
+function setAspect(mode, persist){
+  let fit = "contain";
+  if(mode==="cover") fit="cover";
+  else if(mode==="fill") fit="fill";
+  else if(mode==="none") fit="none";
+  video.style.objectFit = fit==="none" ? "contain" : fit;
+  document.querySelectorAll("#aspectSeg button").forEach(b=> b.classList.toggle("active", b.dataset.val===mode));
+  if(persist!==false) lsSet(LS.ASPECT, mode);
+}
+document.querySelectorAll("#aspectSeg button").forEach(btn=>{
+  btn.addEventListener("click", ()=> setAspect(btn.dataset.val, true));
+});
+
+document.getElementById("sleepSelect").addEventListener("change", (e)=>{
+  clearTimeout(sleepTimerHandle);
+  const mins = parseInt(e.target.value,10);
+  if(mins>0){
+    sleepTimerHandle = setTimeout(()=>{
+      video.pause();
+      showNoSignal();
+      document.getElementById("noSignal").querySelector(".ns-text").textContent = "SLEEP TIMER — PLAYBACK STOPPED";
+    }, mins*60*1000);
+  }
+});
+
+document.getElementById("btnChangePlaylist").addEventListener("click", ()=>{
+  closeSettings();
+  showSetup();
+});
+document.getElementById("btnClearCache").addEventListener("click", ()=>{
+  // Clear cached images/state but keep playlist & last channel
+  if("caches" in window){ caches.keys().then(keys=>keys.forEach(k=>caches.delete(k))); }
+  alertOSD("Cache cleared");
+});
+document.getElementById("btnReset").addEventListener("click", ()=>{
+  localStorage.clear();
+  location.reload();
+});
+
+function alertOSD(msg){
+  document.getElementById("osdProgram").textContent = msg;
+  showOSD();
+}
+
+/* ============================================================
+   VOLUME / MUTE
+   ============================================================ */
+const volumeSlider = document.getElementById("volumeSlider");
+volumeSlider.addEventListener("input", ()=>{
+  const v = parseInt(volumeSlider.value,10);
+  video.volume = v/100;
+  video.muted = v===0;
+  lsSet(LS.VOLUME, v);
+  lsSet(LS.MUTED, video.muted);
+  showControls();
+});
+document.getElementById("btnMute").addEventListener("click", ()=>{
+  video.muted = !video.muted;
+  lsSet(LS.MUTED, video.muted);
+  showControls();
+});
+
+function volumeStep(delta){
+  let v = Math.max(0, Math.min(100, parseInt(volumeSlider.value,10) + delta));
+  volumeSlider.value = v;
+  video.volume = v/100;
+  video.muted = v===0;
+  lsSet(LS.VOLUME, v);
+  lsSet(LS.MUTED, video.muted);
+  showControls();
+}
+
+/* ============================================================
+   BRIGHTNESS
+   ============================================================ */
+function setBrightness(pct){
+  pct = Math.max(30, Math.min(200, pct));
+  video.style.filter = "brightness(" + (pct/100) + ")";
+  lsSet(LS.BRIGHT, pct);
+}
+
+/* ============================================================
+   BUTTONS: prev/next/fullscreen/rotate
+   ============================================================ */
+document.getElementById("btnPrevCh").addEventListener("click", prevChannel);
+document.getElementById("btnNextCh").addEventListener("click", nextChannel);
+
+document.getElementById("btnFullscreen").addEventListener("click", ()=>{
+  const el = document.getElementById("tv");
+  if(!document.fullscreenElement){ (el.requestFullscreen||el.webkitRequestFullscreen||function(){}).call(el); }
+  else { (document.exitFullscreen||document.webkitExitFullscreen||function(){}).call(document); }
+});
+
+document.getElementById("btnRotate").addEventListener("click", ()=>{
+  const tv = document.getElementById("tv");
+  const rotated = tv.style.transform === "rotate(90deg)";
+  if(rotated){
+    tv.style.transform = ""; tv.style.width=""; tv.style.height="";
+  } else {
+    tv.style.transform = "rotate(90deg)";
+    tv.style.width = "100vh"; tv.style.height = "100vw";
+    tv.style.position = "fixed";
+    tv.style.top = "50%"; tv.style.left="50%";
+    tv.style.marginTop = "-50vw"; tv.style.marginLeft = "-50vh";
+  }
+});
+
+/* ============================================================
+   TAP / GESTURES ON VIDEO AREA
+   ============================================================ */
+let touchStartX=0, touchStartY=0, touchStartTime=0, gestureMode=null, startVol=0, startBright=100;
+
+document.getElementById("tv").addEventListener("touchstart", (e)=>{
+  const t = e.touches[0];
+  touchStartX = t.clientX; touchStartY = t.clientY; touchStartTime = Date.now();
+  gestureMode = null;
+  startVol = parseInt(volumeSlider.value,10);
+  startBright = lsGet(LS.BRIGHT, 100);
+}, {passive:true});
+
+document.getElementById("tv").addEventListener("touchmove", (e)=>{
+  const t = e.touches[0];
+  const dx = t.clientX - touchStartX;
+  const dy = touchStartY - t.clientY; // positive = swiped up
+  const w = window.innerWidth;
+
+  if(gestureMode===null){
+    if(Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 24){
+      gestureMode = (touchStartX < w/2) ? "brightness" : "volume-vertical-check";
+      // decide swipe (channel) vs side drag (brightness/volume) by horizontal position + speed
+      if(Math.abs(dx) < 20){
+        gestureMode = (touchStartX < w*0.25) ? "brightness" : (touchStartX > w*0.75) ? "volume" : "channel";
+      }
+    }
+  }
+
+  if(gestureMode==="brightness"){
+    setBrightness(startBright + (dy/3));
+  } else if(gestureMode==="volume"){
+    volumeStep(0); // no-op placeholder, real update below
+    const v = Math.max(0, Math.min(100, startVol + Math.round(dy/2)));
+    volumeSlider.value = v; video.volume = v/100; video.muted = (v===0);
+  }
+}, {passive:true});
+
+document.getElementById("tv").addEventListener("touchend", (e)=>{
+  const dt = Date.now() - touchStartTime;
+  const t = e.changedTouches[0];
+  const dx = t.clientX - touchStartX;
+  const dy = touchStartY - t.clientY;
+
+  if(gestureMode==="volume"){
+    lsSet(LS.VOLUME, parseInt(volumeSlider.value,10));
+    lsSet(LS.MUTED, video.muted);
+    showControls();
+  } else if(gestureMode==="brightness"){
+    showControls();
+  } else if(gestureMode==="channel" || (Math.abs(dy) > 60 && Math.abs(dy) > Math.abs(dx))){
+    if(dy > 60) nextChannel();
+    else if(dy < -60) prevChannel();
+  } else if(Math.abs(dx) < 12 && Math.abs(dy) < 12 && dt < 300){
+    // tap
+    toggleOsdAndControls();
+  }
+  gestureMode = null;
+}, {passive:true});
+
+function toggleOsdAndControls(){
+  const osdShown = document.getElementById("osd").classList.contains("show");
+  if(osdShown){
+    document.getElementById("osd").classList.remove("show");
+    document.getElementById("controls").classList.remove("show");
+  } else {
+    showOSD(); showControls();
+  }
+}
+
+/* ============================================================
+   FOCUS MANAGEMENT (Smart TV remote navigation)
+   ============================================================ */
+function setContext(ctx){
+  activeContext = ctx;
+  refreshFocusables();
+}
+
+function refreshFocusables(){
+  let root;
+  if(activeContext==="setup") root = document.getElementById("setupScreen");
+  else if(activeContext==="list") root = document.getElementById("chList");
+  else if(activeContext==="numpad") root = document.getElementById("numPad");
+  else if(activeContext==="settings") root = document.getElementById("settingsPanel");
+  else root = document.getElementById("controls");
+
+  focusables = Array.from(root.querySelectorAll("[data-focusable]")).filter(el=>{
+    const r = el.getBoundingClientRect();
+    return r.width>0 && r.height>0;
+  });
+  focusIndex = 0;
+  applyFocusRing();
+}
+
+function applyFocusRing(){
+  document.querySelectorAll(".nav-focus").forEach(el=>el.classList.remove("nav-focus"));
+  const el = focusables[focusIndex];
+  if(el){ el.classList.add("nav-focus"); el.focus({preventScroll:true}); el.scrollIntoView({block:"nearest"}); }
+}
+
+function moveFocus(delta){
+  if(!focusables.length) return;
+  focusIndex = (focusIndex + delta + focusables.length) % focusables.length;
+  applyFocusRing();
+}
+
+function activateFocused(){
+  const el = focusables[focusIndex];
+  if(el) el.click();
+}
+
+/* ============================================================
+   REMOTE / KEYBOARD CONTROL
+   ============================================================ */
+document.addEventListener("keydown", (e)=>{
+  const key = e.key;
+
+  // Global overlay navigation
+  if(activeContext !== "player"){
+    if(key==="ArrowDown" || key==="ArrowRight"){ e.preventDefault(); moveFocus(1); return; }
+    if(key==="ArrowUp" || key==="ArrowLeft"){ e.preventDefault(); moveFocus(-1); return; }
+    if(key==="Enter"){ e.preventDefault(); activateFocused(); return; }
+    if(key==="Escape" || key==="Backspace"){
+      e.preventDefault();
+      if(activeContext==="list") closeList();
+      else if(activeContext==="numpad") closeNumPad();
+      else if(activeContext==="settings") closeSettings();
+      return;
+    }
+    if(activeContext==="numpad" && /^[0-9]$/.test(key)){ e.preventDefault(); numPadPress(key); return; }
+    return;
+  }
+
+  // Player context
+  switch(key){
+    case "ArrowUp": e.preventDefault(); nextChannel(); break;
+    case "ArrowDown": e.preventDefault(); prevChannel(); break;
+    case "ArrowRight": e.preventDefault(); volumeStep(5); break;
+    case "ArrowLeft": e.preventDefault(); volumeStep(-5); break;
+    case "PageUp": e.preventDefault(); nextChannel(); break;
+    case "PageDown": e.preventDefault(); prevChannel(); break;
+    case "Enter": e.preventDefault(); openList(); break;
+    case "Backspace": e.preventDefault(); showOSD(); showControls(); break;
+    case "Escape": e.preventDefault(); openSettings(); break;
+    case "m": case "M": video.muted = !video.muted; lsSet(LS.MUTED, video.muted); showControls(); break;
+    case "f": case "F": document.getElementById("btnFullscreen").click(); break;
+    default:
+      if(/^[0-9]$/.test(key)){ e.preventDefault(); openNumPad(); numPadPress(key); }
+      break;
+  }
+  // ChannelUp/ChannelDown/VolumeUp/VolumeDown — some Android TV remotes emit these key names
+  if(key==="ChannelUp") nextChannel();
+  if(key==="ChannelDown") prevChannel();
+  if(key==="VolumeUp") volumeStep(5);
+  if(key==="VolumeDown") volumeStep(-5);
+});
+
+/* Reveal controls on mouse move (desktop convenience) */
+document.getElementById("tv").addEventListener("mousemove", ()=>{
+  if(activeContext==="player"){ showOSD(); showControls(); }
+});
+
+/* Keep object-fit synced if "none" (native/auto) selected already applied in applyStoredSettings */
+
+})();
+</script>
+</body>
+</html>
