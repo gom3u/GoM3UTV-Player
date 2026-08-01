@@ -1,0 +1,1166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>GoM3U TV</title>
+<style>
+/* ============================================================
+   GoM3U TV — Design tokens
+   Palette: broadcast-monitor dark. Signal white on near-black,
+   amber "tally" accent for live/active state, cool signal-blue
+   for informational state. No web fonts (single-file constraint) —
+   type personality comes from scale, weight and tracking instead.
+   ============================================================ */
+:root{
+  --bg:#0a0b0d;
+  --bg-2:#101215;
+  --panel: rgba(19,21,24,0.72);
+  --panel-solid:#15171a;
+  --panel-border: rgba(255,255,255,0.08);
+  --text:#f1efe9;
+  --text-dim:#9a9d a3;
+  --text-dim:#9a9ea5;
+  --text-faint:#5c6066;
+  --accent:#ffb020;
+  --accent-dim:#8a6520;
+  --accent2:#4fa8ff;
+  --danger:#ff5a4e;
+  --ok:#4fd18b;
+  --radius-lg:20px;
+  --radius-md:14px;
+  --radius-sm:8px;
+  --font: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --scale:1;
+  --focus-ring: 0 0 0 3px rgba(255,176,32,0.85), 0 0 0 6px rgba(255,176,32,0.25);
+}
+*{box-sizing:border-box;}
+html,body{
+  margin:0; padding:0; width:100%; height:100%;
+  background:var(--bg); color:var(--text);
+  font-family:var(--font);
+  overflow:hidden;
+  -webkit-user-select:none; user-select:none;
+}
+button{font-family:var(--font); color:inherit;}
+::-webkit-scrollbar{width:8px; height:8px;}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.15); border-radius:8px;}
+@media (prefers-reduced-motion: reduce){
+  *{animation-duration:0.001s !important; transition-duration:0.001s !important;}
+}
+
+/* ---------- App shell ---------- */
+#app{position:fixed; inset:0; overflow:hidden;}
+
+/* Subtle broadcast-monitor texture: soft vignette only (no scanlines by default — kept quiet per restraint) */
+#vignette{
+  position:fixed; inset:0; pointer-events:none; z-index:5;
+  background:radial-gradient(ellipse at center, rgba(0,0,0,0) 55%, rgba(0,0,0,0.55) 100%);
+}
+
+/* ---------- Video ---------- */
+#videoWrap{position:fixed; inset:0; background:#000; display:flex; align-items:center; justify-content:center;}
+video{width:100%; height:100%; background:#000; transition:filter .2s linear;}
+video.fit-contain{object-fit:contain;}
+video.fit-cover{object-fit:cover;}
+video.fit-fill{object-fit:fill;}
+video.fit-169{object-fit:contain; aspect-ratio:16/9;}
+video.fit-43{object-fit:contain; aspect-ratio:4/3;}
+video.fit-zoom{object-fit:cover; transform:scale(1.18);}
+
+/* ---------- Loading / buffering ---------- */
+#bufferSpin{
+  position:fixed; inset:0; display:none; align-items:center; justify-content:center;
+  flex-direction:column; gap:14px; z-index:40; pointer-events:none;
+}
+#bufferSpin.show{display:flex;}
+.spin{
+  width:46px; height:46px; border-radius:50%;
+  border:3px solid rgba(255,176,32,0.2); border-top-color:var(--accent);
+  animation:spin .9s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+#bufferSpin span{font-size:calc(13px * var(--scale)); color:var(--text-dim); letter-spacing:.03em;}
+
+/* ---------- Top info banner ---------- */
+#topBanner{
+  position:fixed; top:0; left:0; right:0; z-index:30;
+  display:flex; justify-content:flex-end; align-items:flex-start;
+  padding:calc(18px * var(--scale)) calc(24px * var(--scale));
+  opacity:0; transform:translateY(-14px);
+  transition:opacity .28s ease, transform .28s ease;
+  pointer-events:none;
+}
+#topBanner.show{opacity:1; transform:translateY(0);}
+#clock{
+  font-size:calc(15px * var(--scale)); font-weight:600; letter-spacing:.04em;
+  background:var(--panel); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px);
+  border:1px solid var(--panel-border); border-radius:999px;
+  padding:8px 16px; color:var(--text);
+}
+
+/* ---------- OSD (channel change) ---------- */
+#osd{
+  position:fixed; top:calc(18px * var(--scale)); left:calc(24px * var(--scale)); z-index:31;
+  display:flex; gap:14px; align-items:center;
+  background:var(--panel); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px);
+  border:1px solid var(--panel-border); border-radius:var(--radius-lg);
+  padding:calc(12px * var(--scale)) calc(20px * var(--scale)) calc(12px * var(--scale)) calc(12px * var(--scale));
+  opacity:0; transform:translateY(-10px) scale(.98);
+  transition:opacity .22s ease, transform .22s ease;
+  pointer-events:none; max-width:min(560px, 62vw);
+}
+#osd.show{opacity:1; transform:translateY(0) scale(1);}
+#osd .logo{
+  width:calc(48px * var(--scale)); height:calc(48px * var(--scale)); border-radius:var(--radius-sm);
+  background:var(--panel-solid) center/contain no-repeat; flex:none;
+  display:flex; align-items:center; justify-content:center; overflow:hidden;
+  border:1px solid var(--panel-border);
+}
+#osd .logo img{width:100%; height:100%; object-fit:contain;}
+#osd .logo .fallback{font-size:calc(18px*var(--scale)); font-weight:800; color:var(--accent);}
+#osd .meta{min-width:0;}
+#osd .num{
+  font-size:calc(11px * var(--scale)); font-weight:700; color:var(--accent);
+  letter-spacing:.12em; text-transform:uppercase;
+}
+#osd .name{
+  font-size:calc(19px * var(--scale)); font-weight:700; letter-spacing:.01em;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:380px;
+}
+#osd .sub{
+  display:flex; gap:10px; margin-top:2px; font-size:calc(11.5px * var(--scale));
+  color:var(--text-dim); letter-spacing:.02em;
+}
+#osd .sub b{color:var(--text-faint); font-weight:600;}
+#osd .dot{width:5px; height:5px; border-radius:50%; background:var(--accent); align-self:center; box-shadow:0 0 6px var(--accent);}
+
+/* ---------- Big number overlay (typed channel number / zap number) ---------- */
+#numOverlay{
+  position:fixed; top:calc(14px*var(--scale)); right:calc(24px*var(--scale)); z-index:32;
+  background:var(--panel); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px);
+  border:1px solid var(--accent-dim); border-radius:var(--radius-lg);
+  padding:10px 26px; opacity:0; transform:scale(.9); transition:opacity .18s, transform .18s;
+  pointer-events:none;
+}
+#numOverlay.show{opacity:1; transform:scale(1);}
+#numOverlay .digits{
+  font-size:calc(46px*var(--scale)); font-weight:800; letter-spacing:.06em;
+  font-variant-numeric:tabular-nums; color:var(--text);
+  text-shadow:0 0 24px rgba(255,176,32,.35);
+}
+#numOverlay .hint{font-size:calc(10.5px*var(--scale)); color:var(--text-faint); letter-spacing:.08em; text-transform:uppercase; text-align:center; margin-top:2px;}
+
+/* ---------- Switching / error banner ---------- */
+#statusMsg{
+  position:fixed; left:50%; bottom:calc(120px*var(--scale)); transform:translate(-50%,10px);
+  z-index:33; background:var(--panel); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px);
+  border:1px solid var(--panel-border); border-radius:999px; padding:10px 22px;
+  font-size:calc(13px*var(--scale)); color:var(--text-dim); opacity:0; transition:opacity .25s, transform .25s;
+  pointer-events:none; white-space:nowrap;
+}
+#statusMsg.show{opacity:1; transform:translate(-50%,0);}
+#statusMsg .dotpulse{display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--accent); margin-right:8px; animation:pulse 1s ease-in-out infinite;}
+@keyframes pulse{0%,100%{opacity:.3;}50%{opacity:1;}}
+
+/* ---------- Bottom control bar ---------- */
+#controlBar{
+  position:fixed; left:0; right:0; bottom:0; z-index:30;
+  padding:calc(18px*var(--scale)) calc(24px*var(--scale)) calc(22px*var(--scale));
+  display:flex; flex-direction:column; gap:12px;
+  opacity:0; transform:translateY(16px); transition:opacity .25s ease, transform .25s ease;
+  pointer-events:none;
+  background:linear-gradient(to top, rgba(0,0,0,.65), rgba(0,0,0,0));
+}
+#controlBar.show{opacity:1; transform:translateY(0); pointer-events:auto;}
+#controlBar .row{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+.pill-info{
+  font-size:calc(12.5px*var(--scale)); color:var(--text-dim);
+  background:var(--panel); border:1px solid var(--panel-border); border-radius:999px;
+  padding:6px 14px; backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px);
+}
+.pill-info b{color:var(--text);}
+.spacer{flex:1;}
+.ctrl-btn{
+  width:calc(46px*var(--scale)); height:calc(46px*var(--scale)); border-radius:50%;
+  background:var(--panel); border:1px solid var(--panel-border); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px);
+  display:flex; align-items:center; justify-content:center; cursor:pointer;
+  font-size:calc(18px*var(--scale)); transition:background .15s, transform .1s, border-color .15s;
+}
+.ctrl-btn:hover, .ctrl-btn.focused{background:rgba(255,176,32,.16); border-color:var(--accent);}
+.ctrl-btn:active{transform:scale(.92);}
+.ctrl-btn.active{background:var(--accent); color:#1a1300; border-color:var(--accent);}
+:focus-visible{outline:none; box-shadow:var(--focus-ring); border-radius:8px;}
+.ctrl-btn:focus-visible{box-shadow:var(--focus-ring);}
+
+/* ---------- Panels (channel list / number pad / settings popups) ---------- */
+.overlay-scrim{
+  position:fixed; inset:0; z-index:50; background:rgba(6,7,8,.55);
+  display:none; align-items:center; backdrop-filter:blur(2px);
+}
+.overlay-scrim.show{display:flex;}
+
+#channelListPanel{
+  width:min(420px, 92vw); height:100%; margin-left:auto;
+  background:var(--panel-solid); border-left:1px solid var(--panel-border);
+  display:flex; flex-direction:column;
+  transform:translateX(100%); transition:transform .25s ease;
+}
+.overlay-scrim.show #channelListPanel{transform:translateX(0);}
+#channelListPanel header{
+  padding:calc(20px*var(--scale)) calc(20px*var(--scale)) 14px; border-bottom:1px solid var(--panel-border);
+  display:flex; align-items:center; justify-content:space-between;
+}
+#channelListPanel header h2{font-size:calc(15px*var(--scale)); margin:0; letter-spacing:.03em; text-transform:uppercase; color:var(--text-dim); font-weight:700;}
+#channelListPanel .close-x{background:none; border:none; color:var(--text-dim); font-size:20px; cursor:pointer; padding:4px 8px;}
+#channelListPanel .close-x:hover{color:var(--text);}
+#channelUl{list-style:none; margin:0; padding:8px; overflow-y:auto; flex:1;}
+#channelUl li{
+  display:flex; align-items:center; gap:12px; padding:10px 12px; border-radius:var(--radius-md);
+  cursor:pointer; margin-bottom:2px; transition:background .12s;
+}
+#channelUl li:hover, #channelUl li.focused{background:rgba(255,255,255,.06);}
+#channelUl li.current{background:rgba(255,176,32,.14); border:1px solid var(--accent-dim);}
+#channelUl li .chnum{
+  width:34px; text-align:right; font-size:13px; font-weight:700; color:var(--text-faint);
+  font-variant-numeric:tabular-nums; flex:none;
+}
+#channelUl li .chlogo{
+  width:36px; height:36px; border-radius:8px; background:#0e0f11; flex:none;
+  display:flex; align-items:center; justify-content:center; overflow:hidden; border:1px solid var(--panel-border);
+  font-size:12px; font-weight:800; color:var(--accent);
+}
+#channelUl li .chlogo img{width:100%; height:100%; object-fit:contain;}
+#channelUl li .chname{font-size:14px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+#channelUl li .live-dot{width:6px; height:6px; border-radius:50%; background:var(--ok); margin-left:auto; flex:none;}
+
+/* ---------- Number pad ---------- */
+#numpadPanel{
+  margin:auto; width:min(300px,82vw);
+  background:var(--panel-solid); border:1px solid var(--panel-border); border-radius:var(--radius-lg);
+  padding:20px; display:flex; flex-direction:column; gap:14px;
+}
+#numpadPanel .display{
+  background:#0c0d0f; border-radius:var(--radius-md); padding:14px; text-align:center;
+  font-size:30px; font-weight:800; letter-spacing:.08em; font-variant-numeric:tabular-nums;
+  min-height:44px; border:1px solid var(--panel-border);
+}
+.numgrid{display:grid; grid-template-columns:repeat(3,1fr); gap:10px;}
+.numgrid button{
+  aspect-ratio:1; border-radius:var(--radius-md); border:1px solid var(--panel-border);
+  background:#1a1d21; font-size:20px; font-weight:700; cursor:pointer; transition:background .12s;
+}
+.numgrid button:hover, .numgrid button.focused{background:rgba(255,176,32,.18); border-color:var(--accent);}
+.numpad-actions{display:flex; gap:10px;}
+.numpad-actions button{
+  flex:1; padding:12px; border-radius:var(--radius-md); border:1px solid var(--panel-border);
+  background:#1a1d21; font-weight:700; font-size:13px; cursor:pointer; letter-spacing:.04em;
+}
+.numpad-actions button.primary{background:var(--accent); color:#1a1300; border-color:var(--accent);}
+.numpad-actions button:hover{filter:brightness(1.1);}
+
+/* ---------- On-screen nav popup ---------- */
+#navPopup{
+  margin:auto; width:min(560px,92vw);
+  background:var(--panel-solid); border:1px solid var(--panel-border); border-radius:var(--radius-lg);
+  padding:22px; display:grid; grid-template-columns:repeat(4,1fr); gap:10px;
+}
+#navPopup h2{grid-column:1/-1; margin:0 0 4px; font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-dim);}
+#navPopup button{
+  display:flex; flex-direction:column; align-items:center; gap:6px;
+  background:#1a1d21; border:1px solid var(--panel-border); border-radius:var(--radius-md);
+  padding:14px 6px; cursor:pointer; font-size:11px; color:var(--text-dim); letter-spacing:.02em;
+}
+#navPopup button .ic{font-size:20px; color:var(--text);}
+#navPopup button:hover, #navPopup button.focused{background:rgba(255,176,32,.14); border-color:var(--accent); color:var(--text);}
+
+/* ---------- Slider popups (brightness / volume) ---------- */
+#sliderPopup{
+  margin:auto; width:min(340px,86vw);
+  background:var(--panel-solid); border:1px solid var(--panel-border); border-radius:var(--radius-lg);
+  padding:24px; text-align:center;
+}
+#sliderPopup h2{margin:0 0 16px; font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-dim);}
+#sliderPopup .valNum{font-size:34px; font-weight:800; margin-bottom:12px; font-variant-numeric:tabular-nums;}
+#sliderPopup input[type=range]{
+  width:100%; -webkit-appearance:none; height:6px; border-radius:4px; background:#26292e; outline:none;
+}
+#sliderPopup input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none; width:22px; height:22px; border-radius:50%; background:var(--accent); cursor:pointer;
+  box-shadow:0 0 0 4px rgba(255,176,32,.2);
+}
+
+/* ---------- Aspect popup ---------- */
+#aspectPopup{
+  margin:auto; width:min(360px,88vw); background:var(--panel-solid); border:1px solid var(--panel-border);
+  border-radius:var(--radius-lg); padding:20px; display:flex; flex-direction:column; gap:8px;
+}
+#aspectPopup h2{margin:0 0 6px; font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-dim);}
+#aspectPopup button{
+  text-align:left; padding:12px 14px; border-radius:var(--radius-md); border:1px solid var(--panel-border);
+  background:#1a1d21; cursor:pointer; font-size:14px; font-weight:600;
+}
+#aspectPopup button.active{background:rgba(255,176,32,.16); border-color:var(--accent);}
+#aspectPopup button:hover, #aspectPopup button.focused{border-color:var(--accent);}
+
+/* ---------- Setup screen ---------- */
+#setupScreen{
+  position:fixed; inset:0; z-index:60; background:radial-gradient(ellipse at 30% 20%, #14171b 0%, #0a0b0d 60%);
+  display:flex; align-items:center; justify-content:center; padding:24px; overflow-y:auto;
+}
+#setupScreen.hide{display:none;}
+.setup-card{width:min(480px,100%); }
+.setup-brand{display:flex; align-items:center; gap:12px; margin-bottom:28px;}
+.setup-brand .mark{
+  width:42px; height:42px; border-radius:10px; background:var(--accent); color:#1a1300;
+  display:flex; align-items:center; justify-content:center; font-weight:900; font-size:18px;
+}
+.setup-brand .word{font-size:20px; font-weight:800; letter-spacing:.02em;}
+.setup-brand .word span{color:var(--accent);}
+.setup-tabs{display:flex; gap:6px; margin-bottom:20px; background:#111316; border-radius:999px; padding:4px; border:1px solid var(--panel-border);}
+.setup-tabs button{
+  flex:1; padding:9px; border-radius:999px; border:none; background:none; color:var(--text-dim);
+  font-size:12.5px; font-weight:700; letter-spacing:.03em; cursor:pointer; text-transform:uppercase;
+}
+.setup-tabs button.active{background:var(--accent); color:#1a1300;}
+.setup-pane{display:none; flex-direction:column; gap:12px;}
+.setup-pane.active{display:flex;}
+.setup-pane label{font-size:12px; color:var(--text-dim); font-weight:600; letter-spacing:.02em;}
+.setup-pane input[type=text], .setup-pane input[type=password], .setup-pane input[type=url]{
+  width:100%; padding:12px 14px; border-radius:var(--radius-md); border:1px solid var(--panel-border);
+  background:#111316; color:var(--text); font-size:14px;
+}
+.setup-pane input:focus{border-color:var(--accent); outline:none;}
+.setup-pane .fileDrop{
+  border:1.5px dashed var(--panel-border); border-radius:var(--radius-md); padding:22px; text-align:center;
+  color:var(--text-dim); font-size:13px; cursor:pointer;
+}
+.setup-pane .fileDrop:hover{border-color:var(--accent); color:var(--text);}
+.setup-go{
+  margin-top:8px; padding:14px; border-radius:var(--radius-md); border:none; background:var(--accent);
+  color:#1a1300; font-weight:800; font-size:14.5px; letter-spacing:.03em; cursor:pointer; text-transform:uppercase;
+}
+.setup-go:hover{filter:brightness(1.08);}
+.setup-go:disabled{opacity:.5; cursor:not-allowed;}
+.setup-err{font-size:12.5px; color:var(--danger); min-height:16px;}
+.setup-foot{margin-top:18px; font-size:11.5px; color:var(--text-faint); text-align:center; line-height:1.6;}
+
+/* ---------- Error screen ---------- */
+#errorScreen{
+  position:fixed; inset:0; z-index:55; background:rgba(6,7,8,.92);
+  display:none; align-items:center; justify-content:center; text-align:center; padding:24px;
+}
+#errorScreen.show{display:flex;}
+#errorScreen .box{max-width:420px;}
+#errorScreen .code{font-size:44px; margin-bottom:10px;}
+#errorScreen h3{margin:0 0 8px; font-size:19px;}
+#errorScreen p{margin:0 0 20px; color:var(--text-dim); font-size:13.5px; line-height:1.6;}
+#errorScreen .actions{display:flex; gap:10px; justify-content:center;}
+#errorScreen button{
+  padding:11px 20px; border-radius:999px; border:1px solid var(--panel-border); background:#1a1d21;
+  color:var(--text); font-weight:700; font-size:13px; cursor:pointer;
+}
+#errorScreen button.primary{background:var(--accent); border-color:var(--accent); color:#1a1300;}
+
+/* ---------- Mode scaling ---------- */
+body.mode-tv{--scale:1.15;}
+body.mode-desktop{--scale:1;}
+body.mode-mobile{--scale:0.92;}
+body.mode-tv .ctrl-btn{width:calc(52px*var(--scale)); height:calc(52px*var(--scale));}
+</style>
+</head>
+<body class="mode-desktop">
+<div id="app">
+
+  <div id="videoWrap">
+    <video id="video" class="fit-contain" playsinline webkit-playsinline></video>
+  </div>
+  <div id="vignette"></div>
+  <div id="bufferSpin"><div class="spin"></div><span id="bufferLabel">Buffering…</span></div>
+
+  <div id="topBanner"><div id="clock">--:--</div></div>
+
+  <div id="osd">
+    <div class="logo" id="osdLogo"><span class="fallback" id="osdLogoFallback">TV</span></div>
+    <div class="meta">
+      <div class="num" id="osdNum">CH 1</div>
+      <div class="name" id="osdName">Channel name</div>
+      <div class="sub">
+        <span>● <b id="osdRes">—</b></span>
+        <span><b id="osdSpeed">—</b></span>
+      </div>
+    </div>
+  </div>
+
+  <div id="numOverlay"><div class="digits" id="numDigits">1</div><div class="hint">Switching…</div></div>
+
+  <div id="statusMsg"><span class="dotpulse"></span><span id="statusText">Channel unavailable. Switching…</span></div>
+
+  <div id="controlBar">
+    <div class="row">
+      <span class="pill-info" id="nowPlayingPill"><b>—</b></span>
+      <span class="spacer"></span>
+      <span class="pill-info" id="volPill">Vol <b>70</b></span>
+    </div>
+    <div class="row">
+      <button class="ctrl-btn" data-action="chDown" title="Channel down (↓)">–</button>
+      <button class="ctrl-btn" data-action="chUp" title="Channel up (↑)">+</button>
+      <button class="ctrl-btn" data-action="numpad" title="Number pad (N)">#</button>
+      <button class="ctrl-btn" data-action="list" title="Channel list (L)">☰</button>
+      <span class="spacer"></span>
+      <button class="ctrl-btn" data-action="mute" id="muteBtn" title="Mute (M)">🔊</button>
+      <button class="ctrl-btn" data-action="brightness" title="Brightness (B)">☀</button>
+      <button class="ctrl-btn" data-action="aspect" title="Aspect (A)">▭</button>
+      <button class="ctrl-btn" data-action="info" title="Info (I)">ⓘ</button>
+      <button class="ctrl-btn" data-action="nav" title="More controls">⋯</button>
+      <button class="ctrl-btn" data-action="fullscreen" id="fsBtn" title="Fullscreen (F)">⛶</button>
+    </div>
+  </div>
+
+  <!-- Channel list -->
+  <div class="overlay-scrim" id="scrimList">
+    <div id="channelListPanel">
+      <header><h2>Channels</h2><button class="close-x" data-close="scrimList">✕</button></header>
+      <ul id="channelUl"></ul>
+    </div>
+  </div>
+
+  <!-- Number pad -->
+  <div class="overlay-scrim" id="scrimNumpad">
+    <div id="numpadPanel">
+      <div class="display" id="numpadDisplay">&nbsp;</div>
+      <div class="numgrid" id="numGrid"></div>
+      <div class="numpad-actions">
+        <button data-npact="clear">CLEAR</button>
+        <button data-npact="del">DEL</button>
+        <button data-npact="ok" class="primary">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- On-screen nav -->
+  <div class="overlay-scrim" id="scrimNav">
+    <div id="navPopup">
+      <h2>Controls</h2>
+      <button data-navact="chUp"><span class="ic">+</span>Ch +</button>
+      <button data-navact="chDown"><span class="ic">–</span>Ch −</button>
+      <button data-navact="volUp"><span class="ic">🔊</span>Vol +</button>
+      <button data-navact="volDown"><span class="ic">🔉</span>Vol −</button>
+      <button data-navact="mute"><span class="ic">🔇</span>Mute</button>
+      <button data-navact="brightness"><span class="ic">☀</span>Brightness</button>
+      <button data-navact="aspect"><span class="ic">▭</span>Aspect</button>
+      <button data-navact="fullscreen"><span class="ic">⛶</span>Fullscreen</button>
+      <button data-navact="numpad"><span class="ic">#</span>Number pad</button>
+      <button data-navact="list"><span class="ic">☰</span>Channel list</button>
+      <button data-navact="info"><span class="ic">ⓘ</span>Info</button>
+      <button data-navact="exit"><span class="ic">⏻</span>Exit</button>
+    </div>
+  </div>
+
+  <!-- Slider popup (brightness/volume) -->
+  <div class="overlay-scrim" id="scrimSlider">
+    <div id="sliderPopup">
+      <h2 id="sliderTitle">Brightness</h2>
+      <div class="valNum" id="sliderVal">100</div>
+      <input type="range" id="sliderInput" min="0" max="100" value="100">
+    </div>
+  </div>
+
+  <!-- Aspect popup -->
+  <div class="overlay-scrim" id="scrimAspect">
+    <div id="aspectPopup">
+      <h2>Aspect ratio</h2>
+      <button data-aspect="auto">Auto</button>
+      <button data-aspect="contain">Contain</button>
+      <button data-aspect="cover">Cover</button>
+      <button data-aspect="fill">Fill</button>
+      <button data-aspect="169">16:9</button>
+      <button data-aspect="43">4:3</button>
+      <button data-aspect="zoom">Zoom</button>
+    </div>
+  </div>
+
+  <!-- Setup screen -->
+  <div id="setupScreen">
+    <div class="setup-card">
+      <div class="setup-brand">
+        <div class="mark">G</div>
+        <div class="word">GoM3U<span>TV</span></div>
+      </div>
+      <div class="setup-tabs">
+        <button class="active" data-tab="url">M3U URL</button>
+        <button data-tab="file">M3U File</button>
+        <button data-tab="xtream">Xtream</button>
+      </div>
+
+      <div class="setup-pane active" data-pane="url">
+        <label>Playlist URL</label>
+        <input type="url" id="inUrl" placeholder="https://example.com/playlist.m3u">
+      </div>
+
+      <div class="setup-pane" data-pane="file">
+        <label>M3U file</label>
+        <div class="fileDrop" id="fileDropZone">Tap to choose a .m3u / .m3u8 file</div>
+        <input type="file" id="inFile" accept=".m3u,.m3u8,text/plain" style="display:none">
+        <span id="fileChosenName" style="font-size:12px;color:var(--text-dim);"></span>
+      </div>
+
+      <div class="setup-pane" data-pane="xtream">
+        <label>Server URL</label>
+        <input type="text" id="inXServer" placeholder="http://server.example.com:8080">
+        <label>Username</label>
+        <input type="text" id="inXUser" placeholder="username">
+        <label>Password</label>
+        <input type="password" id="inXPass" placeholder="password">
+      </div>
+
+      <div class="setup-err" id="setupErr"></div>
+      <button class="setup-go" id="setupGoBtn">Load & Play</button>
+      <div class="setup-foot">Your playlist and settings are stored only on this device.</div>
+    </div>
+  </div>
+
+  <!-- Error screen -->
+  <div id="errorScreen">
+    <div class="box">
+      <div class="code">⚠</div>
+      <h3 id="errTitle">Playback failed</h3>
+      <p id="errBody">Something went wrong loading this stream.</p>
+      <div class="actions">
+        <button id="errRetry" class="primary">Retry</button>
+        <button id="errSetup">Change playlist</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.15/dist/hls.min.js"></script>
+<script>
+(function(){
+"use strict";
+
+/* ============================================================
+   Storage
+   ============================================================ */
+const LS_CONFIG = "gom3u_config";
+const LS_CHANNELS = "gom3u_channels";
+
+function loadConfig(){
+  try{ return JSON.parse(localStorage.getItem(LS_CONFIG) || "null"); }catch(e){ return null; }
+}
+function saveConfig(cfg){
+  localStorage.setItem(LS_CONFIG, JSON.stringify(cfg));
+}
+function loadChannels(){
+  try{ return JSON.parse(localStorage.getItem(LS_CHANNELS) || "[]"); }catch(e){ return []; }
+}
+function saveChannels(list){
+  try{ localStorage.setItem(LS_CHANNELS, JSON.stringify(list)); }catch(e){ /* storage full – ignore */ }
+}
+
+let config = loadConfig() || {
+  sourceType:null, m3uUrl:null, m3uText:null,
+  xServer:null, xUser:null, xPass:null,
+  lastChannelId:null, volume:70, muted:false,
+  brightness:100, aspect:"contain", mode:"auto", fullscreenPref:false
+};
+let channels = loadChannels();
+
+/* ============================================================
+   Elements
+   ============================================================ */
+const $ = (sel)=>document.querySelector(sel);
+const video = $("#video");
+const setupScreen = $("#setupScreen");
+const errorScreen = $("#errorScreen");
+const controlBar = $("#controlBar");
+const osd = $("#osd");
+const topBanner = $("#topBanner");
+const numOverlay = $("#numOverlay");
+const statusMsg = $("#statusMsg");
+const bufferSpin = $("#bufferSpin");
+
+let hls = null;
+let currentIndex = -1;
+let controlsTimer = null;
+let osdTimer = null;
+let statusTimer = null;
+let bufferWatchTimer = null;
+let bufferStallStart = null;
+let retriedOnce = false;
+let typedNumber = "";
+let typedNumberTimer = null;
+let dlStartBytes = 0, dlStartTime = 0, lastSpeedLabel = "—";
+
+/* ============================================================
+   Mode detection & scaling
+   ============================================================ */
+function detectMode(){
+  if(config.mode && config.mode !== "auto") return config.mode;
+  const ua = navigator.userAgent || "";
+  if(/TV|SmartTV|GoogleTV|AFT(B|T|M|S)|BRAVIA|HbbTV|Tizen|WebOS/i.test(ua)) return "tv";
+  if(/Mobi|Android.*Mobile|iPhone/i.test(ua) && Math.min(window.innerWidth,window.innerHeight) < 560) return "mobile";
+  if(window.innerWidth <= 820) return "mobile";
+  return "desktop";
+}
+function applyMode(){
+  const m = detectMode();
+  document.body.classList.remove("mode-tv","mode-desktop","mode-mobile");
+  document.body.classList.add("mode-"+m);
+}
+applyMode();
+
+/* ============================================================
+   Clock
+   ============================================================ */
+function tickClock(){
+  const d = new Date();
+  $("#clock").textContent = d.toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"});
+}
+setInterval(tickClock, 1000); tickClock();
+
+/* ============================================================
+   M3U parsing
+   ============================================================ */
+function parseM3U(text){
+  const lines = text.split(/\r?\n/);
+  const list = [];
+  let cur = null;
+  for(let raw of lines){
+    const line = raw.trim();
+    if(!line) continue;
+    if(line.startsWith("#EXTINF")){
+      const nameMatch = line.match(/,(.*)$/);
+      const logoMatch = line.match(/tvg-logo="([^"]*)"/i);
+      const idMatch = line.match(/tvg-id="([^"]*)"/i);
+      const groupMatch = line.match(/group-title="([^"]*)"/i);
+      cur = {
+        name: nameMatch ? nameMatch[1].trim() : "Unnamed channel",
+        logo: logoMatch ? logoMatch[1] : "",
+        id: idMatch ? idMatch[1] : "",
+        group: groupMatch ? groupMatch[1] : ""
+      };
+    } else if(line.startsWith("#")){
+      continue;
+    } else {
+      if(!cur) cur = {name:"Channel "+(list.length+1), logo:"", id:"", group:""};
+      cur.url = line;
+      cur.chNum = list.length + 1;
+      list.push(cur);
+      cur = null;
+    }
+  }
+  return list;
+}
+
+async function buildXtreamChannels(server, user, pass){
+  const base = server.replace(/\/+$/,"");
+  const apiUrl = `${base}/player_api.php?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}&action=get_live_streams`;
+  const res = await fetch(apiUrl);
+  if(!res.ok) throw new Error("Xtream API request failed ("+res.status+")");
+  const data = await res.json();
+  if(!Array.isArray(data)) throw new Error("Unexpected Xtream response");
+  return data.map((item, i)=>({
+    name: item.name || ("Channel "+(i+1)),
+    logo: item.stream_icon || "",
+    id: String(item.stream_id || i),
+    group: item.category_id || "",
+    chNum: i+1,
+    url: `${base}/live/${encodeURIComponent(user)}/${encodeURIComponent(pass)}/${item.stream_id}.m3u8`
+  }));
+}
+
+/* ============================================================
+   Setup screen wiring
+   ============================================================ */
+function showSetup(err){
+  setupScreen.classList.remove("hide");
+  $("#setupErr").textContent = err || "";
+}
+function hideSetup(){ setupScreen.classList.add("hide"); }
+
+document.querySelectorAll(".setup-tabs button").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    document.querySelectorAll(".setup-tabs button").forEach(b=>b.classList.remove("active"));
+    document.querySelectorAll(".setup-pane").forEach(p=>p.classList.remove("active"));
+    btn.classList.add("active");
+    document.querySelector(`.setup-pane[data-pane="${btn.dataset.tab}"]`).classList.add("active");
+  });
+});
+
+let chosenFileText = null;
+$("#fileDropZone").addEventListener("click", ()=> $("#inFile").click());
+$("#inFile").addEventListener("change", (e)=>{
+  const f = e.target.files[0];
+  if(!f) return;
+  $("#fileChosenName").textContent = f.name;
+  const reader = new FileReader();
+  reader.onload = ()=>{ chosenFileText = reader.result; };
+  reader.readAsText(f);
+});
+
+$("#setupGoBtn").addEventListener("click", async ()=>{
+  const activeTab = document.querySelector(".setup-tabs button.active").dataset.tab;
+  $("#setupErr").textContent = "";
+  $("#setupGoBtn").disabled = true;
+  $("#setupGoBtn").textContent = "Loading…";
+  try{
+    let list = [];
+    if(activeTab === "url"){
+      const url = $("#inUrl").value.trim();
+      if(!url) throw new Error("Enter a playlist URL.");
+      const res = await fetch(url);
+      if(!res.ok) throw new Error("Could not fetch playlist ("+res.status+").");
+      const text = await res.text();
+      list = parseM3U(text);
+      config.sourceType = "url"; config.m3uUrl = url; config.m3uText = null;
+      config.xServer = null; config.xUser = null; config.xPass = null;
+    } else if(activeTab === "file"){
+      if(!chosenFileText) throw new Error("Choose an M3U file first.");
+      list = parseM3U(chosenFileText);
+      config.sourceType = "file"; config.m3uText = chosenFileText; config.m3uUrl = null;
+      config.xServer = null; config.xUser = null; config.xPass = null;
+    } else {
+      const server = $("#inXServer").value.trim();
+      const user = $("#inXUser").value.trim();
+      const pass = $("#inXPass").value.trim();
+      if(!server || !user || !pass) throw new Error("Fill in server, username and password.");
+      list = await buildXtreamChannels(server, user, pass);
+      config.sourceType = "xtream"; config.xServer = server; config.xUser = user; config.xPass = pass;
+      config.m3uUrl = null; config.m3uText = null;
+    }
+    if(!list.length) throw new Error("Playlist is empty or invalid.");
+    channels = list;
+    saveChannels(channels);
+    saveConfig(config);
+    hideSetup();
+    startPlayback(0);
+  }catch(err){
+    $("#setupErr").textContent = err.message || "Failed to load playlist.";
+  }finally{
+    $("#setupGoBtn").disabled = false;
+    $("#setupGoBtn").textContent = "Load & Play";
+  }
+});
+
+$("#errSetup").addEventListener("click", ()=>{
+  errorScreen.classList.remove("show");
+  showSetup();
+});
+$("#errRetry").addEventListener("click", ()=>{
+  errorScreen.classList.remove("show");
+  if(currentIndex >= 0) startPlayback(currentIndex);
+});
+
+/* ============================================================
+   Playback engine
+   ============================================================ */
+function destroyHls(){
+  if(hls){ try{ hls.destroy(); }catch(e){} hls = null; }
+}
+
+function playUrl(url){
+  destroyHls();
+  bufferStallStart = null; retriedOnce = false;
+  dlStartBytes = 0; dlStartTime = performance.now();
+
+  const isM3U8 = /\.m3u8($|\?)/i.test(url);
+  if(isM3U8 && window.Hls && Hls.isSupported()){
+    hls = new Hls({ maxBufferLength: 30 });
+    hls.loadSource(url);
+    hls.attachMedia(video);
+    hls.on(Hls.Events.MANIFEST_PARSED, ()=>{ video.play().catch(()=>{}); });
+    hls.on(Hls.Events.LEVEL_LOADED, (evt, data)=>{
+      const level = hls.levels[hls.currentLevel];
+      if(level) updateResolutionLabel(level.width, level.height);
+    });
+    hls.on(Hls.Events.ERROR, (evt, data)=>{
+      if(data.fatal){
+        handlePlaybackFailure();
+      }
+    });
+  } else if(video.canPlayType("application/vnd.apple.mpegurl") || !isM3U8){
+    video.src = url;
+    video.play().catch(()=>{});
+  } else {
+    // Fallback attempt: let the browser try natively anyway
+    video.src = url;
+    video.play().catch(()=>{ handlePlaybackFailure(); });
+  }
+}
+
+function updateResolutionLabel(w,h){
+  if(w && h) $("#osdRes").textContent = w+"×"+h;
+}
+
+video.addEventListener("loadedmetadata", ()=>{
+  if(video.videoWidth && video.videoHeight){
+    updateResolutionLabel(video.videoWidth, video.videoHeight);
+  }
+});
+
+function startPlayback(index){
+  if(!channels.length) return;
+  index = ((index % channels.length) + channels.length) % channels.length;
+  currentIndex = index;
+  const ch = channels[index];
+  config.lastChannelId = ch.id || String(index);
+  saveConfig(config);
+  playUrl(ch.url);
+  showOSD(ch, index);
+  updateNowPlayingPill(ch, index);
+  startBufferWatch();
+}
+
+function nextChannel(){ startPlayback(currentIndex + 1); }
+function prevChannel(){ startPlayback(currentIndex - 1); }
+
+function handlePlaybackFailure(){
+  if(!retriedOnce){
+    retriedOnce = true;
+    showStatus("Channel unavailable. Retrying…");
+    setTimeout(()=>{ if(currentIndex>=0) playUrl(channels[currentIndex].url); }, 800);
+  } else {
+    showStatus("Channel unavailable. Switching…");
+    setTimeout(()=> nextChannel(), 900);
+  }
+}
+
+/* Auto-recovery: watch for stalled buffering > 10s */
+function startBufferWatch(){
+  clearInterval(bufferWatchTimer);
+  bufferWatchTimer = setInterval(()=>{
+    if(video.readyState < 3 && !video.paused){
+      if(bufferStallStart === null) bufferStallStart = Date.now();
+      const stalledFor = Date.now() - bufferStallStart;
+      bufferSpin.classList.add("show");
+      if(stalledFor > 10000){
+        bufferStallStart = null;
+        handlePlaybackFailure();
+      }
+    } else {
+      bufferStallStart = null;
+      bufferSpin.classList.remove("show");
+    }
+  }, 1000);
+}
+
+video.addEventListener("waiting", ()=>{ bufferSpin.classList.add("show"); });
+video.addEventListener("playing", ()=>{ bufferSpin.classList.remove("show"); bufferStallStart = null; });
+video.addEventListener("error", ()=>{ handlePlaybackFailure(); });
+
+/* Estimated network speed (rough, from buffered progress) */
+setInterval(()=>{
+  try{
+    if(video.buffered.length){
+      const bufferedEnd = video.buffered.end(video.buffered.length-1);
+      const bitrateGuess = hls && hls.levels && hls.currentLevel>=0 ? hls.levels[hls.currentLevel].bitrate : null;
+      if(bitrateGuess){
+        lastSpeedLabel = (bitrateGuess/1000000).toFixed(1)+" Mbps";
+      } else {
+        lastSpeedLabel = "—";
+      }
+      $("#osdSpeed").textContent = lastSpeedLabel;
+    }
+  }catch(e){}
+}, 3000);
+
+/* ============================================================
+   OSD
+   ============================================================ */
+function showOSD(ch, index){
+  $("#osdNum").textContent = "CH " + (ch.chNum || index+1);
+  $("#osdName").textContent = ch.name;
+  $("#osdRes").textContent = "—";
+  const logoEl = $("#osdLogo");
+  if(ch.logo){
+    logoEl.innerHTML = `<img src="${ch.logo}" alt="" onerror="this.parentNode.innerHTML='<span class=\\'fallback\\'>${(ch.name||"TV").slice(0,2).toUpperCase()}</span>'">`;
+  } else {
+    logoEl.innerHTML = `<span class="fallback">${(ch.name||"TV").slice(0,2).toUpperCase()}</span>`;
+  }
+  osd.classList.add("show");
+  topBanner.classList.add("show");
+  clearTimeout(osdTimer);
+  osdTimer = setTimeout(()=>{ osd.classList.remove("show"); topBanner.classList.remove("show"); }, 3000);
+}
+
+function updateNowPlayingPill(ch, index){
+  $("#nowPlayingPill").innerHTML = `<b>CH ${ch.chNum||index+1} · ${escapeHtml(ch.name)}</b>`;
+}
+function escapeHtml(s){ return (s||"").replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+function showStatus(text){
+  $("#statusText").textContent = text;
+  statusMsg.classList.add("show");
+  clearTimeout(statusTimer);
+  statusTimer = setTimeout(()=> statusMsg.classList.remove("show"), 3000);
+}
+
+/* ============================================================
+   Controls visibility
+   ============================================================ */
+function showControls(){
+  controlBar.classList.add("show");
+  clearTimeout(controlsTimer);
+  controlsTimer = setTimeout(()=> controlBar.classList.remove("show"), 4500);
+}
+function hideControls(){ controlBar.classList.remove("show"); }
+
+document.addEventListener("mousemove", showControls);
+document.addEventListener("touchstart", showControls, {passive:true});
+document.addEventListener("click", showControls);
+
+/* ============================================================
+   Channel list panel
+   ============================================================ */
+function renderChannelList(){
+  const ul = $("#channelUl");
+  ul.innerHTML = "";
+  channels.forEach((ch, i)=>{
+    const li = document.createElement("li");
+    li.tabIndex = 0;
+    if(i === currentIndex) li.classList.add("current");
+    li.innerHTML = `
+      <span class="chnum">${ch.chNum||i+1}</span>
+      <span class="chlogo">${ch.logo ? `<img src="${ch.logo}" onerror="this.parentNode.textContent='${(ch.name||'TV').slice(0,2).toUpperCase()}'">` : (ch.name||"TV").slice(0,2).toUpperCase()}</span>
+      <span class="chname">${escapeHtml(ch.name)}</span>
+      ${i===currentIndex ? '<span class="live-dot"></span>' : ''}
+    `;
+    li.addEventListener("click", ()=>{
+      startPlayback(i);
+      closeOverlay("scrimList");
+    });
+    ul.appendChild(li);
+  });
+}
+
+function openOverlay(id){
+  document.getElementById(id).classList.add("show");
+  if(id === "scrimList") renderChannelList();
+}
+function closeOverlay(id){ document.getElementById(id).classList.remove("show"); }
+document.querySelectorAll("[data-close]").forEach(b=>{
+  b.addEventListener("click", ()=> closeOverlay(b.dataset.close));
+});
+document.querySelectorAll(".overlay-scrim").forEach(scrim=>{
+  scrim.addEventListener("click", (e)=>{ if(e.target === scrim) scrim.classList.remove("show"); });
+});
+
+/* ============================================================
+   Number pad
+   ============================================================ */
+const numGrid = $("#numGrid");
+["1","2","3","4","5","6","7","8","9","DEL","0","OK"].forEach(k=>{
+  const b = document.createElement("button");
+  b.textContent = k;
+  b.addEventListener("click", ()=>{
+    if(k === "DEL") npDel();
+    else if(k === "OK") npOk();
+    else npAppend(k);
+  });
+  numGrid.appendChild(b);
+});
+let npBuffer = "";
+function npAppend(d){ if(npBuffer.length<4){ npBuffer += d; $("#numpadDisplay").textContent = npBuffer; } }
+function npDel(){ npBuffer = npBuffer.slice(0,-1); $("#numpadDisplay").textContent = npBuffer || "\u00A0"; }
+function npClear(){ npBuffer = ""; $("#numpadDisplay").textContent = "\u00A0"; }
+function npOk(){
+  if(npBuffer){
+    goToChannelNumber(parseInt(npBuffer,10));
+  }
+  npClear();
+  closeOverlay("scrimNumpad");
+}
+document.querySelectorAll("[data-npact]").forEach(b=>{
+  b.addEventListener("click", ()=>{
+    const a = b.dataset.npact;
+    if(a==="clear") npClear();
+    if(a==="del") npDel();
+    if(a==="ok") npOk();
+  });
+});
+
+function goToChannelNumber(n){
+  const idx = channels.findIndex(c => (c.chNum||0) === n);
+  if(idx >= 0) startPlayback(idx);
+  else showStatus("No channel "+n);
+}
+
+/* Typed-number quick-zap overlay (typing digits while watching) */
+function handleTypedDigit(d){
+  typedNumber += d;
+  if(typedNumber.length > 4) typedNumber = typedNumber.slice(-4);
+  $("#numDigits").textContent = typedNumber;
+  numOverlay.classList.add("show");
+  clearTimeout(typedNumberTimer);
+  typedNumberTimer = setTimeout(()=>{
+    numOverlay.classList.remove("show");
+    const n = parseInt(typedNumber, 10);
+    typedNumber = "";
+    if(!isNaN(n)) goToChannelNumber(n);
+  }, 1000);
+}
+
+/* ============================================================
+   Aspect / brightness / volume
+   ============================================================ */
+function applyAspect(a){
+  video.classList.remove("fit-contain","fit-cover","fit-fill","fit-169","fit-43","fit-zoom");
+  const map = {auto:"fit-contain", contain:"fit-contain", cover:"fit-cover", fill:"fit-fill", "169":"fit-169", "43":"fit-43", zoom:"fit-zoom"};
+  video.classList.add(map[a] || "fit-contain");
+  config.aspect = a; saveConfig(config);
+  document.querySelectorAll("#aspectPopup button").forEach(b=> b.classList.toggle("active", b.dataset.aspect===a));
+}
+document.querySelectorAll("#aspectPopup button").forEach(b=>{
+  b.addEventListener("click", ()=>{ applyAspect(b.dataset.aspect); closeOverlay("scrimAspect"); });
+});
+
+function applyBrightness(v){
+  video.style.filter = `brightness(${v}%)`;
+  config.brightness = v; saveConfig(config);
+}
+
+function applyVolume(v, muted){
+  video.volume = Math.max(0, Math.min(1, v/100));
+  video.muted = !!muted;
+  config.volume = v; config.muted = !!muted; saveConfig(config);
+  $("#volPill").innerHTML = `Vol <b>${muted? "Muted" : v}</b>`;
+  $("#muteBtn").textContent = muted || v===0 ? "🔇" : "🔊";
+  $("#muteBtn").classList.toggle("active", !!muted);
+}
+
+let sliderMode = "brightness";
+function openSlider(mode){
+  sliderMode = mode;
+  $("#sliderTitle").textContent = mode === "brightness" ? "Brightness" : "Volume";
+  const val = mode === "brightness" ? config.brightness : config.volume;
+  $("#sliderInput").value = val;
+  $("#sliderVal").textContent = val;
+  openOverlay("scrimSlider");
+}
+$("#sliderInput").addEventListener("input", (e)=>{
+  const v = parseInt(e.target.value,10);
+  $("#sliderVal").textContent = v;
+  if(sliderMode === "brightness") applyBrightness(v);
+  else applyVolume(v, false);
+});
+
+/* ============================================================
+   Fullscreen
+   ============================================================ */
+function toggleFullscreen(){
+  if(!document.fullscreenElement){
+    document.documentElement.requestFullscreen?.().catch(()=>{});
+    config.fullscreenPref = true;
+  } else {
+    document.exitFullscreen?.();
+    config.fullscreenPref = false;
+  }
+  saveConfig(config);
+}
+
+/* ============================================================
+   Control bar button actions
+   ============================================================ */
+function doAction(action){
+  showControls();
+  switch(action){
+    case "chUp": nextChannel(); break;
+    case "chDown": prevChannel(); break;
+    case "numpad": npClear(); openOverlay("scrimNumpad"); break;
+    case "list": openOverlay("scrimList"); break;
+    case "mute": applyVolume(config.volume, !config.muted); break;
+    case "brightness": openSlider("brightness"); break;
+    case "aspect": openOverlay("scrimAspect"); break;
+    case "info": showOSD(channels[currentIndex], currentIndex); break;
+    case "nav": openOverlay("scrimNav"); break;
+    case "fullscreen": toggleFullscreen(); break;
+    case "volUp": applyVolume(Math.min(100, config.volume+10), false); break;
+    case "volDown": applyVolume(Math.max(0, config.volume-10), false); break;
+    case "exit": exitToSetup(); break;
+  }
+}
+document.querySelectorAll("[data-action]").forEach(b=>{
+  b.addEventListener("click", ()=> doAction(b.dataset.action));
+});
+document.querySelectorAll("[data-navact]").forEach(b=>{
+  b.addEventListener("click", ()=>{ closeOverlay("scrimNav"); doAction(b.dataset.navact); });
+});
+
+function exitToSetup(){
+  closeOverlay("scrimNav");
+  if(confirm("Exit and change playlist? This clears the current setup.")){
+    localStorage.removeItem(LS_CONFIG);
+    localStorage.removeItem(LS_CHANNELS);
+    location.reload();
+  }
+}
+
+/* ============================================================
+   Keyboard / remote navigation
+   ============================================================ */
+window.addEventListener("keydown", (e)=>{
+  if(!setupScreen.classList.contains("hide")) return; // typing in setup form
+  const k = e.key;
+  showControls();
+
+  if(/^[0-9]$/.test(k)){ handleTypedDigit(k); return; }
+
+  switch(k){
+    case "ArrowUp": nextChannel(); break;
+    case "ArrowDown": prevChannel(); break;
+    case "ArrowLeft": applyVolume(Math.max(0, config.volume-5), false); break;
+    case "ArrowRight": applyVolume(Math.min(100, config.volume+5), false); break;
+    case "Enter": if(document.querySelector(".overlay-scrim.show")){} else openOverlay("scrimList"); break;
+    case "Escape":
+    case "Backspace":
+      document.querySelectorAll(".overlay-scrim.show").forEach(s=>s.classList.remove("show"));
+      break;
+    case "f": case "F": toggleFullscreen(); break;
+    case "m": case "M": applyVolume(config.volume, !config.muted); break;
+    case "a": case "A": openOverlay("scrimAspect"); break;
+    case "b": case "B": openSlider("brightness"); break;
+    case "i": case "I": showOSD(channels[currentIndex], currentIndex); break;
+    case "l": case "L": openOverlay("scrimList"); break;
+    case "n": case "N": npClear(); openOverlay("scrimNumpad"); break;
+    case " ": case "MediaPlayPause":
+      if(video.paused) video.play(); else video.pause();
+      break;
+    case "ChannelUp": nextChannel(); break;
+    case "ChannelDown": prevChannel(); break;
+  }
+});
+
+/* Simple focus navigation within open overlays using arrow keys handled natively via tab-index/click; kept lightweight per remote support goal. */
+
+/* ============================================================
+   Init
+   ============================================================ */
+function init(){
+  applyVolume(config.volume ?? 70, config.muted ?? false);
+  applyBrightness(config.brightness ?? 100);
+  applyAspect(config.aspect ?? "contain");
+
+  if(!config.sourceType || !channels.length){
+    showSetup();
+    return;
+  }
+  hideSetup();
+
+  // resume last channel if possible, else first channel
+  let startIdx = 0;
+  if(config.lastChannelId){
+    const found = channels.findIndex(c => (c.id || "") === config.lastChannelId);
+    if(found >= 0) startIdx = found;
+  }
+  startPlayback(startIdx);
+  showControls();
+}
+
+init();
+
+})();
+</script>
+</body>
+</html>
